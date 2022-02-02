@@ -1,10 +1,12 @@
-
 import 'dart:async';
+import 'dart:convert' as convert;
 
-import 'package:flutter/cupertino.dart';
+import 'package:firebase_remote_config/firebase_remote_config.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:webview_flutter/webview_flutter.dart';
+import 'package:http/http.dart' as http;
+import 'package:device_info_plus/device_info_plus.dart';
+import 'H.dart';
 
 class WebViewExample extends StatefulWidget {
   const WebViewExample({Key? key}) : super(key: key);
@@ -15,80 +17,88 @@ class WebViewExample extends StatefulWidget {
 
 class WebViewExampleState extends State<WebViewExample> {
   final Completer<WebViewController> _controller =
-  Completer<WebViewController>();
+      Completer<WebViewController>();
+
+  bool isLoading = true;
+  String bannerUrl = "";
+  String plugUrl = "https://vilianre-play.xyz";
 
   @override
   void initState() {
-    super.initState();
     useFullScreen();
     WebView.platform = SurfaceAndroidWebView();
-
+    super.initState();
   }
-
-  // @override
-  // Widget build(BuildContext context) {
-  //   return const WebView(
-  //     initialUrl: 'https://flutter.dev',
-  //   );
-  // }
 
   @override
   Widget build(BuildContext context) {
+    initConfig();
     return Scaffold(
-      backgroundColor: Colors.green,
-      appBar: AppBar(
-        title: const Text('Flutter WebView example'),
-        // This drop down menu demonstrates that Flutter widgets can be shown over the web view.
-        // actions: <Widget>[
-        //   NavigationControls(_controller.future),
-        //   SampleMenu(_controller.future),
-        // ],
-      ),
-      // We're using a Builder here so we have a context that is below the Scaffold
-      // to allow calling Scaffold.of(context) so we can show a snackbar.
-      body: Builder(builder: (BuildContext context) {
-        return WebView(
-          initialUrl: 'https://flutter.dev',
-          javascriptMode: JavascriptMode.unrestricted,
-          onWebViewCreated: (WebViewController webViewController) {
-          //  _controller.complete(webViewController);
-          },
-          onProgress: (int progress) {
-            print('WebView is loading (progress : $progress%)');
-          },
-          javascriptChannels: <JavascriptChannel>{
-          //  _toasterJavascriptChannel(context),
-          },
-          navigationDelegate: (NavigationRequest request) {
-            if (request.url.startsWith('https://www.youtube.com/')) {
-              print('blocking navigation to $request}');
-              return NavigationDecision.prevent;
-            }
-            print('allowing navigation to $request');
-            return NavigationDecision.navigate;
-          },
-          onPageStarted: (String url) {
-            print('Page started loading: $url');
-          },
-          onPageFinished: (String url) {
-            print('Page finished loading: $url');
-          },
-          gestureNavigationEnabled: true,
-          backgroundColor: const Color(0x00000000),
-        );
-      }),
-     // floatingActionButton: favoriteButton(),
+        backgroundColor: Colors.green,
+        body: isLoading
+            ? const CircularProgressIndicator()
+            : WebView(
+            initialUrl: bannerUrl == "" ? plugUrl : bannerUrl,
+          javascriptMode: JavascriptMode.unrestricted
+        )
     );
   }
-}
 
-void useFullScreen() {
-  // to hide only bottom bar:
-  SystemChrome.setEnabledSystemUIMode (SystemUiMode.manual, overlays: [SystemUiOverlay.top]);
+  void initConfig() async {
+    try {
+      await FirebaseRemoteConfig.instance
+          .setConfigSettings(RemoteConfigSettings(
+        fetchTimeout: const Duration(seconds: 10),
+        minimumFetchInterval: Duration.zero,
+      ));
+      final isActivate = await FirebaseRemoteConfig.instance.fetchAndActivate();
 
-// to hide only status bar:
-  SystemChrome.setEnabledSystemUIMode (SystemUiMode.manual, overlays: [SystemUiOverlay.bottom]);
+        if (isActivate) {
+          String urlFromFirebase = FirebaseRemoteConfig.instance.getString("key1");
 
-// to hide both:
-  SystemChrome.setEnabledSystemUIMode (SystemUiMode.manual, overlays: []);
+          var deviceInfo = await DeviceInfoPlugin().androidInfo;
+          var bid = deviceInfo.id;
+          bid ??= "";
+          var country = "";
+          //country ??= "";
+          var device = deviceInfo.device;
+          device ??= "";
+
+          String fullUrl = urlFromFirebase +
+              "?bid=" + bid +
+              "&country=" + country +
+              "&device=" + device;
+
+          // var url = Uri.https('base_url', 'endpoint', {'bid' : 'someBid', 'country' : 'someCountry', 'device' : 'someDevice'});
+          var url = Uri.parse(fullUrl);
+          var response = await http.get(url);
+          if (response.statusCode == 200) {
+
+            var fromJson = (convert.jsonDecode(response.body) as Map<String, String>);
+
+            fromJson.forEach((key, value) {
+              setState(() {
+              if(key == "banner_url" && value.isNotEmpty) {
+
+                  isLoading = false;
+                  bannerUrl = value;
+              } else {
+                isLoading = false;
+                bannerUrl = "";
+              }
+              });
+            });
+          }
+        } else {
+          isLoading = false;
+          bannerUrl = "";
+        }
+
+    } catch (exception) {
+      setState(() {
+        isLoading = false;
+        bannerUrl = "";
+      });
+    }
+  }
 }

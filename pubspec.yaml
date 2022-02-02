@@ -31,6 +31,9 @@ dependencies:
     sdk: flutter
   webview_flutter: ^3.0.0
   http: ^0.13.4
+  firebase_remote_config: ^2.0.0
+  sleek_circular_slider: ^2.0.1
+  device_info_plus: ^3.2.1
 
 
   # The following adds the Cupertino Icons font to your application.
